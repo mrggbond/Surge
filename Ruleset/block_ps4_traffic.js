@@ -1,22 +1,12 @@
 // block_ps_traffic.js
+// Script modified to return true for block, false/null otherwise
+// To be used with a rule like: SCRIPT,BlockPS4Traffic,REJECT
 
-/**
- * Surge Rule Script
- *
- * This script checks:
- * 1. If the source IP is 192.168.32.2.
- * 2. If the destination IP matches a predefined list of IPs OR
- * 3. If the requested domain matches a predefined list of domains.
- *
- * If all conditions for source IP and (destination IP or domain) are met,
- * the connection is rejected. Otherwise, the script returns null,
- * allowing Surge to process the request with subsequent rules.
- */
-
-// --- Configuration: Lists of IPs and Domains to Block ---
 const TARGET_SOURCE_IP = "192.168.32.2";
 
 const BLOCKED_DEST_IPS = new Set([
+    "23.46.198.204",
+    // ... (all your other destination IPs)
     "2.16.149.5", "2.16.149.29", "2.16.149.31", "2.16.168.103", "2.16.168.112",
     "2.16.168.116", "2.16.170.217", "2.16.170.218", "2.17.1.238", "2.17.57.196",
     "2.17.175.235", "2.18.148.58", "2.19.80.147", "2.19.80.153", "2.20.166.124",
@@ -31,11 +21,11 @@ const BLOCKED_DEST_IPS = new Set([
     "23.41.37.190", "23.42.176.57", "23.42.177.192", "23.42.181.192", "23.43.1.124",
     "23.43.50.16", "23.43.82.9", "23.43.82.33", "23.44.217.104", "23.45.141.187",
     "23.45.147.236", "23.45.207.199", "23.45.207.202", "23.46.63.136", "23.46.63.146",
-    "23.46.197.187", "23.46.198.204", "23.46.228.38", "23.46.228.49", "23.49.101.104",
+    "23.46.197.187", /* "23.46.198.204", removed duplicate */ "23.46.228.38", "23.46.228.49", "23.49.101.104",
     "23.49.104.174", "23.49.104.180", "23.51.2.49", "23.51.61.98", "23.52.77.253",
     "23.53.122.197", "23.53.122.198", "23.54.34.199", "23.54.155.77", "23.54.155.78",
     "23.54.155.103", "23.54.155.112", "23.54.155.169", "23.54.155.173", "23.54.254.85",
-    "23.55.39.136", "23.55.39.177", "23.55.44.45", "2_PS_TRAFFIC.55.44.51", "23.55.44.78",
+    "23.55.39.136", "23.55.39.177", "23.55.44.45", "23.55.44.51", "23.55.44.78",
     "23.55.44.81", "23.55.168.169", "23.55.168.194", "23.55.168.210", "23.55.209.191",
     "23.55.236.138", "23.55.236.139", "23.56.4.50", "23.56.4.66", "23.56.26.161",
     "23.56.97.25", "23.56.97.35", "23.56.109.133", "23.56.109.134", "23.56.109.138",
@@ -89,6 +79,7 @@ const BLOCKED_DEST_IPS = new Set([
 ]);
 
 const BLOCKED_DOMAINS = new Set([
+    // ... (all your other domains)
     "ps4updptl.sa.np.community.playstation.net",
     "event.api.np.km.playstation.net",
     "cc.prod.gaikai.com",
@@ -99,43 +90,29 @@ const BLOCKED_DOMAINS = new Set([
     "gs-sec.ww.np.dl.playstation.net"
 ]);
 
-// --- Main Script Logic ---
-// This function is called by Surge for every request if this script is
-// listed as a rule in the [Rule] section.
 function main(session) {
     const clientAddress = session.sourceAddress;
-    const destAddress = session.destinationAddress; // Resolved IP address
-    const requestDomain = session.domain; // Original requested domain
+    const destAddress = session.destinationAddress;
+    const requestDomain = session.domain;
 
-    // First, check if the source IP matches the one we want to filter
-    if (clientAddress !== TARGET_SOURCE_IP) {
-        // If the source IP does not match, this script should not block the request.
-        // Return null to let Surge try other rules.
-        return null;
-    }
-
-    // Now, if the source IP matches, check the destination IP and domain
     let shouldBlock = false;
 
-    // Check destination IP
-    if (destAddress && BLOCKED_DEST_IPS.has(destAddress)) {
-        shouldBlock = true;
-        $surge.log(`BlockPSTraffic: Blocking IP ${destAddress} from source ${clientAddress}`);
-    }
+    if (clientAddress === TARGET_SOURCE_IP) {
+        if (destAddress && BLOCKED_DEST_IPS.has(destAddress)) {
+            shouldBlock = true;
+            $surge.log(`BlockPS4Traffic: Script evaluating to TRUE (block) for IP ${destAddress} from source ${clientAddress}. Rule policy REJECT will apply.`);
+        }
 
-    // Check requested domain (if not already blocked by IP)
-    if (!shouldBlock && requestDomain && BLOCKED_DOMAINS.has(requestDomain)) {
-        shouldBlock = true;
-        $surge.log(`BlockPSTraffic: Blocking domain ${requestDomain} from source ${clientAddress}`);
+        if (!shouldBlock && requestDomain && BLOCKED_DOMAINS.has(requestDomain)) {
+            shouldBlock = true;
+            $surge.log(`BlockPS4Traffic: Script evaluating to TRUE (block) for domain ${requestDomain} from source ${clientAddress}. Rule policy REJECT will apply.`);
+        }
     }
 
     if (shouldBlock) {
-        return $policy.reject(); // Or $policy.reject('NO_DROP')
+        return true; // Script matches, external rule policy (REJECT) will be applied
+    } else {
+        return false; // Script does not match, external rule policy will NOT be applied
+                      // (or return null, which Surge usually interprets as false in this context)
     }
-
-    // If none of the blocking conditions (destination IP or domain) are met
-    // for the TARGET_SOURCE_IP, return null to let other rules handle it.
-    // This is important because this script will be evaluated for ALL requests
-    // unless we explicitly return null for non-matching cases.
-    return null;
 }
